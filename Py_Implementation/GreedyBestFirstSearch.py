@@ -5,38 +5,36 @@ class Point():
     def __init__(self, x, y):
         self.x=x
         self.y=y
+    def __repr__(self):
+        return "(%s,%s)" % (self.x, self.y)
 
-class Node():
-    def __init__(self, coordinates, dist):
-        self.coordinates = coordinates
-        self.dist = dist
-
-class PQNode(object):
-    def __init__(self, priority, node):
-        self.priority = priority
-        self.node = node
+class GBFSNode(object):
+    def __init__(self, parent=None, coordinates=None, dist=0, heuristic=0):
+        self.parent=parent
+        self.coordinates=coordinates
+        self.dist=dist
+        self.heuristic=heuristic
 
     def __eq__(self, other):
-        return (self.priority == other.priority)
+        return (self.heuristic == other.heuristic)
 
     def __ne__(self, other):
-        return (self.priority != other.priority)
+        return (self.heuristic != other.heuristic)
 
     def __lt__(self, other):
-        return (self.priority < other.priority)
+        return (self.heuristic < other.heuristic)
 
     def __le__(self, other):
-        return (self.priority <= other.priority)
+        return (self.heuristic <= other.heuristic)
 
     def __gt__(self, other):
-        return (self.priority > other.priority)
+        return (self.heuristic > other.heuristic)
 
     def __ge__(self, other):
-        return (self.priority >= other.priority)
+        return (self.heuristic >= other.heuristic)
 
     def __repr__(self):
-        return "%s, (%s,%s)" % (self.priority, self.node.coordinates.x, self.node.coordinates.y)
-
+        return "%s, (%s,%s)" % (self.heuristic, self.coordinates.x, self.coordinates.y)
 
 def isSafe(x, y, nrow, ncol):
     if x >=0 and x < nrow and y>=0 and y < ncol:
@@ -44,6 +42,7 @@ def isSafe(x, y, nrow, ncol):
     return False
 
 def heuristic(currentNodeCoordinates, exitNodeCoordinates):
+    #Using Euclidean Distance as a heuristic function
     return math.sqrt(((currentNodeCoordinates.x- exitNodeCoordinates.x)**2) + ((currentNodeCoordinates.y - exitNodeCoordinates.y)**2))
 
 #adjacent squares, representing movements left, right, up and down
@@ -51,7 +50,14 @@ rowNums=[0,-1,0,1]
 colNums=[-1,0,1,0]
 
 
-def BFSPQ(maze, src, dest, nrow, ncol):
+def GBFS(maze, src, dest):
+
+    maxQueueSize = 0
+    expandedNodeCnt = 0
+
+    nrow = len(maze)
+    ncol = len(maze[0])
+
     visited = []
 
     #if src or destination is an obstacle, we cannot have a path
@@ -67,22 +73,34 @@ def BFSPQ(maze, src, dest, nrow, ncol):
     q=queue.PriorityQueue(maxsize = (nrow * ncol))
 
     #Add source to queue
-    srcNode = Node(src,0)
-    endNode = Node(dest, 0)
-    q.put(PQNode(heuristic(srcNode.coordinates, endNode.coordinates), srcNode))
+    srcHeuristic = heuristic(src, dest)
+    srcNode = GBFSNode(None, src, 0, srcHeuristic)
+
+    q.put(srcNode)
 
     while not q.empty():
+        if q.qsize() > maxQueueSize:
+            maxQueueSize = q.qsize()
+
         current = q.get()
-        print("Heuristic: ", current.priority, " cum-dist: ", current.node.dist, " (x,y): (", current.node.coordinates.x, ",", current.node.coordinates.y, ")")
-        point = current.node.coordinates
-        #             print("value in point ==> (", point.x,",", point.y,") ==> cum-dist:", current.node.dist)
+        # print("Heuristic: ", current.heuristic, " cum-dist: ", current.dist, " (x,y): (", current.coordinates.x, ",", current.coordinates.y, ")")
+        point = current.coordinates
 
         #If coordinates of cuurent node are same as destination, the goal has been reached
         if point.x == dest.x and point.y == dest.y:
-            print("current distance cost", current.node.dist)
-            return current.node.dist
+            # print("current distance cost", current.dist)
+            path = []
+            cost = current.dist
+            curnt = current
+            while curnt is not None:
+                tuple = (curnt.coordinates.x, curnt.coordinates.y)
+                # print("new tuple:", tuple)
+                path.append(tuple)
+                curnt = curnt.parent
+            # return (path[::-1], cost)  #Return reversed path
+            return (path, cost, expandedNodeCnt, maxQueueSize)  #Return reversed path
 
-
+        expandedNodeCnt += 1
         for i in range(0,4):
             row = point.x + rowNums[i]
             col = point.y + colNums[i]
@@ -90,21 +108,12 @@ def BFSPQ(maze, src, dest, nrow, ncol):
             #add the adjacent node to queue if it is a valid coordinate, it is not an obstacle and has not been visited yet
             if isSafe(row, col, nrow, ncol) and maze[row][col] is not 0 and visited[row][col] is False:
                 visited[row][col] = True
-                newNode = Node(Point(row, col), current.node.dist + 1)
-                newNodeHeuristic = heuristic(newNode.coordinates, endNode.coordinates)
-                #                     print("New Node Heuristic: ", newNodeHeuristic, ", point: (", row, ",", col, ")")
-                newPQNode = PQNode(newNodeHeuristic, newNode)
-                q.put(newPQNode)
+                newPoint = Point(row, col)
+                newPointHeuristic = heuristic(newPoint, dest)
+                newGBFSNode = GBFSNode(current, newPoint, current.dist + 1, newPointHeuristic)
+                q.put(newGBFSNode)
     #if path is not found, then return -1
-    return -1
-
-def shortestPathInMaze(maze, src, dest):
-    nrow = len(maze)
-    ncol = len(maze[0])
-
-    val = BFSPQ(maze, src, dest, nrow, ncol)
-
-    return val
+    # return -1
 
 if __name__ == '__main__':
     grid=[[1,1,1,1,1,1,1,1,1,1,1],
@@ -124,10 +133,11 @@ if __name__ == '__main__':
     srcObject = Point(src[0], src[1])
     destObject = Point(dest[0], dest[1])
 
-    val = shortestPathInMaze(grid, srcObject, destObject)
+    (path, cost, expndCount, maxQueueSize) = GBFS(grid, srcObject, destObject)
 
-    if val == -1:
-        print("Path doesn't exist")
-    else:
-        print("Length of shortest path is: ", val)
+    print("Path => ", path[::-1])
+    print("Cost: ", cost)
+    print("Total Expanded Nodes Count: ", expndCount)
+    print("Maximum no.of nodes kept in memory: ", maxQueueSize)
+
 

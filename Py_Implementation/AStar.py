@@ -66,7 +66,8 @@ def astar(maze, start, end):
             while current is not None:
                 path.append(current.position)
                 current = current.parent
-            return path[::-1] #Return reversed path
+            return path[::-1] #Return reversed path\
+
 
         #Generate Children
         children = []
